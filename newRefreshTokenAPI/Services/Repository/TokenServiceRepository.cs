@@ -32,7 +32,7 @@ namespace newRefreshTokenAPI.Services
                 issuer: _configure["JWT:Issuer"],
                 audience: _configure["JWT:Audience"],
                 claims: userClaims,
-                expires: DateTime.UtcNow.AddSeconds(10),
+                expires: DateTime.UtcNow.AddMinutes(10),
                 signingCredentials: credentials
 
                 );

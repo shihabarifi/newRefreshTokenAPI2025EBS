@@ -27,7 +27,7 @@ namespace newRefreshTokenAPI.Controllers
                 {
                     await connection.OpenAsync();
 
-                    string query = "SELECT ID, [اسم المخزن] AS StoreName FROM vewStores"; // استخدام اسم العمود بين أقواس مربعة
+                    string query = "SELECT tblStores.AccountID as ID,vewStores.[اسم المخزن] AS StoreName FROM vewStores inner join tblStores on tblStores.ID=vewStores.ID\r\n"; // استخدام اسم العمود بين أقواس مربعة
 
                     using (SqlCommand command = new SqlCommand(query, connection))
                     {

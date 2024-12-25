@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 
@@ -16,6 +17,7 @@ namespace newRefreshTokenAPI.Controllers
         }
 
         [HttpGet]
+        [Authorize]
         public IActionResult GetAccounts()
         {
             List<Account> accounts = new List<Account>();

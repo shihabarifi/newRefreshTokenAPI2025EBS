@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using System.ComponentModel.DataAnnotations;
@@ -13,10 +14,11 @@ namespace newRefreshTokenAPI.Controllers
 
         public UnitsController(IConfiguration configuration)
         {
-            _connectionString = configuration.GetConnectionString("UserContext");
+            _connectionString = configuration.GetConnectionString("UserContext1");
         }
 
         [HttpGet("{classId}")] // إضافة مسار لتمرير ClassID كمعامل
+        [Authorize]
         public async Task<IActionResult> GetUnitsByClassIdAsync(long classId)
         {
             List<Unit> units = new List<Unit>();

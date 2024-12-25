@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using System.ComponentModel.DataAnnotations;
@@ -14,10 +15,11 @@ namespace newRefreshTokenAPI.Controllers
 
         public ProductController(IConfiguration configuration)
         {
-            _connectionString = configuration.GetConnectionString("UserContext");
+            _connectionString = configuration.GetConnectionString("UserContext1");
         }
 
         [HttpGet]
+        [Authorize]
         public async Task<IActionResult> GetClassesAsync()
         {
             List<Product> classes = new List<Product>();
