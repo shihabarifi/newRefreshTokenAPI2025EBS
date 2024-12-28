@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using Dapper;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
@@ -97,8 +98,154 @@ namespace newRefreshTokenAPI.Controllers
         }
 
 
+        [HttpPut("{id}")]
+        [Authorize]
+        public async Task<IActionResult> UpdateInvoiceAsync(int id, SPSellInvoice updatedInvoice)
+        {
+            if (id != updatedInvoice.ID)
+            {
+                return BadRequest("ID mismatch");
+            }
+
+            if (updatedInvoice == null || updatedInvoice.InvoiceDetails == null)
+            {
+                return BadRequest("Invoice data is invalid.");
+            }
+
+            using (TransactionScope scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
+            using (SqlConnection connection = new SqlConnection(_connectionString))
+            {
+                try
+                {
+                    await connection.OpenAsync();
+
+                    // 1. تحديث الفاتورة الرئيسية
+                    string updateInvoiceQuery = @"
+                    UPDATE tblSPSellInvoice
+                    SET PeriodNumber = @PeriodNumber, SalePointID = @SalePointID, TheNumber = @TheNumber, TheDate = @TheDate,
+                        ThePay = @ThePay, StoreID = @StoreID, AccountID = @AccountID, CustomerName = @CustomerName,
+                        Notes = @Notes, UserID = @UserID, Descount = @Descount, Debited = @Debited, PayAmount = @PayAmount
+                    WHERE ID = @ID;";
+
+                    using (SqlCommand updateInvoiceCommand = new SqlCommand(updateInvoiceQuery, connection))
+                    {
+                        updateInvoiceCommand.Parameters.AddWithValue("@ID", id);
+                        updateInvoiceCommand.Parameters.AddWithValue("@PeriodNumber", updatedInvoice.PeriodNumber ?? "");
+                        updateInvoiceCommand.Parameters.AddWithValue("@SalePointID", updatedInvoice.SalePointID);
+                        updateInvoiceCommand.Parameters.AddWithValue("@TheNumber", updatedInvoice.TheNumber ?? "");
+                        updateInvoiceCommand.Parameters.AddWithValue("@TheDate", updatedInvoice.TheDate);
+                        updateInvoiceCommand.Parameters.AddWithValue("@ThePay", updatedInvoice.ThePay);
+                        updateInvoiceCommand.Parameters.AddWithValue("@StoreID", updatedInvoice.StoreID);
+                        updateInvoiceCommand.Parameters.AddWithValue("@AccountID", updatedInvoice.AccountID);
+                        updateInvoiceCommand.Parameters.AddWithValue("@CustomerName", updatedInvoice.CustomerName ?? "");
+                        updateInvoiceCommand.Parameters.AddWithValue("@Notes", updatedInvoice.Notes ?? "");
+                        updateInvoiceCommand.Parameters.AddWithValue("@UserID", updatedInvoice.UserID);
+                        updateInvoiceCommand.Parameters.AddWithValue("@Descount", updatedInvoice.Descount);
+                        updateInvoiceCommand.Parameters.AddWithValue("@Debited", updatedInvoice.Debited);
+                        updateInvoiceCommand.Parameters.AddWithValue("@PayAmount", updatedInvoice.PayAmount);
+
+                        int rowsAffected = await updateInvoiceCommand.ExecuteNonQueryAsync();
+                        if (rowsAffected == 0)
+                        {
+                            return NotFound(); // لم يتم العثور على الفاتورة للتحديث
+                        }
+                    }
+
+                    // 2. حذف تفاصيل الفاتورة القديمة
+                    string deleteDetailsQuery = "DELETE FROM tblSPSellInvoiceDetailes WHERE ParentID = @ParentID;";
+                    using (SqlCommand deleteDetailsCommand = new SqlCommand(deleteDetailsQuery, connection))
+                    {
+                        deleteDetailsCommand.Parameters.AddWithValue("@ParentID", id);
+                        await deleteDetailsCommand.ExecuteNonQueryAsync();
+                    }
+
+                    // 3. إضافة تفاصيل الفاتورة الجديدة
+                    string insertDetailsQuery = @"
+                    INSERT INTO tblSPSellInvoiceDetailes (ParentID, ClassID, UnitID, Quantity, UnitPrice, SubDescount, TotalAMount)
+                    VALUES (@ParentID, @ClassID, @UnitID, @Quantity, @UnitPrice, @SubDescount, @TotalAMount);";
+
+                    using (SqlCommand insertDetailsCommand = new SqlCommand(insertDetailsQuery, connection))
+                    {
+                        foreach (var detail in updatedInvoice.InvoiceDetails)
+                        {
+                            insertDetailsCommand.Parameters.Clear();
+                            insertDetailsCommand.Parameters.AddWithValue("@ParentID", id);
+                            insertDetailsCommand.Parameters.AddWithValue("@ClassID", detail.ClassID);
+                            insertDetailsCommand.Parameters.AddWithValue("@UnitID", detail.UnitID);
+                            insertDetailsCommand.Parameters.AddWithValue("@Quantity", detail.Quantity);
+                            insertDetailsCommand.Parameters.AddWithValue("@UnitPrice", detail.UnitPrice);
+                            insertDetailsCommand.Parameters.AddWithValue("@SubDescount", detail.SubDescount);
+                            insertDetailsCommand.Parameters.AddWithValue("@TotalAMount", detail.TotalAMount);
+
+                            await insertDetailsCommand.ExecuteNonQueryAsync();
+                        }
+                    }
+
+                    scope.Complete();
+                    return Ok(new { id = updatedInvoice.ID, Success = true }); // إرجاع ID الفاتورة التي تم تعديلها
+                  
+                }
+                catch (SqlException sqlEx)
+                {
+                    return StatusCode(500, $"Database error: {sqlEx.Message}");
+                }
+                catch (Exception ex)
+                {
+                    return StatusCode(500, $"Internal server error: {ex.Message}");
+                }
+            }
+        }
+
+
+        [HttpDelete("{id}")]
+        [Authorize]
+        public async Task<IActionResult> DeleteInvoiceAsync(int id)
+        {
+            using (TransactionScope scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
+            using (SqlConnection connection = new SqlConnection(_connectionString))
+            {
+                try
+                {
+                    await connection.OpenAsync();
+
+                    // 1. حذف تفاصيل الفاتورة
+                    string deleteDetailsQuery = "DELETE FROM tblSPSellInvoiceDetailes WHERE ParentID = @ParentID;";
+                    using (SqlCommand deleteDetailsCommand = new SqlCommand(deleteDetailsQuery, connection))
+                    {
+                        deleteDetailsCommand.Parameters.AddWithValue("@ParentID", id);
+                        await deleteDetailsCommand.ExecuteNonQueryAsync();
+                    }
+
+                    // 2. حذف الفاتورة الرئيسية
+                    string deleteInvoiceQuery = "DELETE FROM tblSPSellInvoice WHERE ID = @ID;";
+                    using (SqlCommand deleteInvoiceCommand = new SqlCommand(deleteInvoiceQuery, connection))
+                    {
+                        deleteInvoiceCommand.Parameters.AddWithValue("@ID", id);
+
+                        int rowsAffected = await deleteInvoiceCommand.ExecuteNonQueryAsync();
+                        if (rowsAffected == 0)
+                        {
+                            return NotFound(); // لم يتم العثور على الفاتورة للحذف
+                        }
+                    }
+
+                    scope.Complete();
+                    return Ok(new { id = id, Success = true }); // إرجاع ID الفاتورة التي تم حذفها
+                   // return NoContent(); // إرجاع 204 No Content عند النجاح
+                }
+                catch (SqlException sqlEx)
+                {
+                    return StatusCode(500, $"Database error: {sqlEx.Message}");
+                }
+                catch (Exception ex)
+                {
+                    return StatusCode(500, $"Internal server error: {ex.Message}");
+                }
+            }
+        }
 
         [HttpGet("{id}")] // إضافة مسار لتمرير ID الفاتورة كمعامل
+       
         public async Task<IActionResult> GetInvoiceByIdAsync(int id)
         {
             if (id <= 0)
@@ -203,6 +350,37 @@ namespace newRefreshTokenAPI.Controllers
                 }
             }
             }
+
+
+        [HttpGet]
+        [Authorize]
+        public async Task<IActionResult> GetAllInvoicesAsync()
+        {
+            using (SqlConnection connection = new SqlConnection(_connectionString))
+            {
+                try
+                {
+                    await connection.OpenAsync();
+
+                    string query = @"
+                    SELECT ID, PeriodNumber, SalePointID, TheNumber, TheDate, ThePay, StoreID, AccountID, CustomerName, Notes, UserID, Descount, Debited, PayAmount
+                    FROM tblSPSellInvoice ORDER BY ID DESC ";
+
+                    // استخدام Dapper لتنفيذ الاستعلام وجلب البيانات
+                    var invoices = await connection.QueryAsync<SPSellInvoice>(query);
+
+                    return Ok(invoices);
+                }
+                catch (SqlException sqlEx)
+                {
+                    return StatusCode(500, $"Database error: {sqlEx.Message}");
+                }
+                catch (System.Exception ex)
+                {
+                    return StatusCode(500, $"Internal server error: {ex.Message}");
+                }
+            }
+        }
 
         public class SPSellInvoice
         {

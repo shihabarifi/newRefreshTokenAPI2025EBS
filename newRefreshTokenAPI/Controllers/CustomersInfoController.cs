@@ -13,7 +13,7 @@ namespace newRefreshTokenAPI.Controllers
 
         public CustomersInfoController(IConfiguration configuration)
         {
-            _connectionString = configuration.GetConnectionString("UserContext");
+            _connectionString = configuration.GetConnectionString("UserContext1");
         }
 
         [HttpGet]
