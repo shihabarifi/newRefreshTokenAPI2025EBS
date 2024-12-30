@@ -356,33 +356,92 @@ namespace newRefreshTokenAPI.Controllers
         [Authorize]
         public async Task<IActionResult> GetAllInvoicesAsync()
         {
-            using (SqlConnection connection = new SqlConnection(_connectionString))
+            try
             {
-                try
+                using (var connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
 
                     string query = @"
-                    SELECT ID, PeriodNumber, SalePointID, TheNumber, TheDate, ThePay, StoreID, AccountID, CustomerName, Notes, UserID, Descount, Debited, PayAmount
-                    FROM tblSPSellInvoice ORDER BY ID DESC ";
+                    SELECT 
+                        tblSPSellInvoice.ID, 
+                        PeriodNumber, 
+                        SalePointID, 
+                        TheNumber, 
+                        TheDate, 
+                        ThePay,
+                        StoreAccount.AccountName AS StoreName, 
+                        dbo.tblAccounts.AccountName, 
+                        CustomerName, 
+                        Notes,  
+                        Descount, 
+                        Debited, 
+                        PayAmount
+                    FROM tblSPSellInvoice 
+                    INNER JOIN dbo.tblAccounts 
+                        ON dbo.tblAccounts.ID = dbo.tblSPSellInvoice.AccountID
+                    INNER JOIN dbo.tblAccounts AS StoreAccount 
+                        ON StoreAccount.ID = dbo.tblSPSellInvoice.StoreID 
+                    ORDER BY ID DESC";
 
-                    // استخدام Dapper لتنفيذ الاستعلام وجلب البيانات
-                    var invoices = await connection.QueryAsync<SPSellInvoice>(query);
+                    var invoices = await connection.QueryAsync<HeaderInvoice>(query);
 
                     return Ok(invoices);
                 }
-                catch (SqlException sqlEx)
-                {
-                    return StatusCode(500, $"Database error: {sqlEx.Message}");
-                }
-                catch (System.Exception ex)
-                {
-                    return StatusCode(500, $"Internal server error: {ex.Message}");
-                }
+            }
+            catch (SqlException sqlEx)
+            {
+                return StatusCode(500, $"Database error: {sqlEx.Message}");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Internal server error: {ex.Message}");
             }
         }
 
-        public class SPSellInvoice
+
+        [HttpGet("details/{invoiceId}")]
+    public async Task<IActionResult> GetInvoiceDetailsAsync(int invoiceId)
+    {
+        try
+        {
+            using (SqlConnection connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+
+                string query = @"
+                SELECT
+                    dbo.tblClasses.ClassNumber AS ClassNumber,
+                    dbo.tblClasses.ClassName AS ClassName,
+                    dbo.tblUnits.UnitName AS UnitName,
+                    dbo.tblSPSellInvoiceDetailes.Quantity AS Quantity,
+                    dbo.tblSPSellInvoiceDetailes.UnitPrice AS UnitPrice,
+                    dbo.tblSPSellInvoiceDetailes.SubDescount AS SubDescount,
+                    dbo.tblSPSellInvoiceDetailes.TotalAMount AS TotalAmount
+                FROM dbo.tblSPSellInvoiceDetailes
+                INNER JOIN dbo.tblClasses ON dbo.tblSPSellInvoiceDetailes.ClassID = dbo.tblClasses.ID
+                INNER JOIN dbo.tblUnits ON dbo.tblSPSellInvoiceDetailes.UnitID = dbo.tblUnits.ID
+                WHERE tblSPSellInvoiceDetailes.ParentID = @invoiceId;
+            ";
+
+                // استخدام Dapper لجلب البيانات
+                var details = await connection.QueryAsync<InvoiceDetail>(query, new { invoiceId });
+
+                return Ok(details);
+            }
+        }
+        catch (SqlException sqlEx)
+        {
+            return StatusCode(500, $"Database error: {sqlEx.Message}");
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Internal server error: {ex.Message}");
+        }
+    }
+
+
+    public class SPSellInvoice
         {
             public int ID { get; set; }
             public string? PeriodNumber { get; set; }
@@ -413,5 +472,35 @@ namespace newRefreshTokenAPI.Controllers
             public decimal SubDescount { get; set; }
             public decimal TotalAMount { get; set; }
         }
+
+
+        public class InvoiceDetail
+        {
+            public string ClassNumber { get; set; }
+            public string ClassName { get; set; }
+            public string UnitName { get; set; }
+            public string Quantity { get; set; } // تأكد من النوع الصحيح
+            public string UnitPrice { get; set; }
+            public string SubDescount { get; set; }
+            public string TotalAmount { get; set; }
+        }
+
+        public class HeaderInvoice
+        {
+            public int ID { get; set; }
+            public string PeriodNumber { get; set; }
+            public int SalePointID { get; set; }
+            public string TheNumber { get; set; }
+            public DateTime TheDate { get; set; }
+            public string ThePay { get; set; }
+            public string StoreName { get; set; }
+            public string AccountName { get; set; }
+            public string CustomerName { get; set; }
+            public string Notes { get; set; }
+            public decimal Descount { get; set; }
+            public decimal Debited { get; set; }
+            public decimal PayAmount { get; set; }
+        }
+
     }
 }
